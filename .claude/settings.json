@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node /tmp/verify_otp_nav.mjs)",
+      "Bash(mkdir -p /tmp/pw-verify)",
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "Bash(cp /tmp/verify_otp_nav.mjs /tmp/pw-verify/verify_otp_nav.mjs)",
+      "Bash(node verify_otp_nav.mjs)",
+      "Bash(node probe.mjs)"
+    ],
+    "additionalDirectories": [
+      "/tmp",
+      "/private/tmp"
+    ]
+  }
+}
