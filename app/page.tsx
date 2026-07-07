@@ -1,7 +1,18 @@
-import LoginPage from "@/src/components/LoginPage";
-import Image from "next/image";
+import HomePage from "@/src/components/HomePage";
+import {
+  fetchCategories,
+  groupCategories,
+  type CategoryGroup,
+} from "@/src/lib/categories-api";
 
+export default async function Page() {
+  let categories: CategoryGroup[] = [];
 
-export default function Home() {
-    return <LoginPage />;
+  try {
+    categories = groupCategories(await fetchCategories());
+  } catch {
+    categories = [];
+  }
+
+  return <HomePage categories={categories} />;
 }

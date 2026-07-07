@@ -1,19 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useCart } from "@/src/context/CartContext";
 import { getCategoryStyle } from "@/src/lib/category-style";
 import { productPrice } from "@/src/lib/products-api";
-
-type PaymentMethod = "card" | "upi" | "netbanking" | "cod";
-
-const PAYMENT_METHODS: { id: PaymentMethod; icon: string; label: string }[] = [
-  { id: "card", icon: "💳", label: "Credit / Debit Card" },
-  { id: "upi", icon: "📱", label: "UPI / Wallet" },
-  { id: "netbanking", icon: "🏦", label: "Net Banking" },
-  { id: "cod", icon: "📦", label: "Cash on Delivery" },
-];
+import { getUserId } from "@/src/lib/auth-storage";
+import {
+  findNearestAddress,
+  getAddressesApi,
+  type SavedAddress,
+} from "@/src/lib/address-api";
 
 const DELIVERY_FEE = 25;
 const HANDLING_FEE = 15;
@@ -22,11 +19,58 @@ const PROMO_DISCOUNT_RATE = 0.2;
 
 export default function CheckoutPage() {
   const { cartDetails, addToCart, decrementFromCart, clearCart } = useCart();
-  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>("card");
   const [promoCode, setPromoCode] = useState("");
   const [appliedPromo, setAppliedPromo] = useState(false);
   const [promoError, setPromoError] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
+  const [selectedAddress, setSelectedAddress] = useState<SavedAddress | null>(
+    null
+  );
+  const [addressLoading, setAddressLoading] = useState(true);
+
+  useEffect(() => {
+    async function run() {
+      const userId = getUserId();
+      if (!userId) {
+        setAddressLoading(false);
+        return;
+      }
+
+      try {
+        const addresses = await getAddressesApi(userId);
+
+        if (addresses.length === 0) {
+          setSelectedAddress(null);
+          return;
+        }
+
+        if (!navigator.geolocation) {
+          setSelectedAddress(addresses[0]);
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            setSelectedAddress(
+              findNearestAddress(
+                addresses,
+                pos.coords.latitude,
+                pos.coords.longitude
+              ) ?? addresses[0]
+            );
+          },
+          () => setSelectedAddress(addresses[0]),
+          { enableHighAccuracy: true, timeout: 5000 }
+        );
+      } catch {
+        setSelectedAddress(null);
+      } finally {
+        setAddressLoading(false);
+      }
+    }
+
+    run();
+  }, []);
 
   const cartItems = useMemo(
     () =>
@@ -98,16 +142,32 @@ export default function CheckoutPage() {
             <div className="bg-white rounded-3xl p-6 shadow-sm">
               <div className="flex items-center justify-between">
                 <h2 className="font-bold text-[#2E234D]">1 · Deliver to</h2>
-                <button className="text-pink-500 text-sm font-semibold">
+                <Link href="/address" className="text-pink-500 text-sm font-semibold">
                   Change
-                </button>
+                </Link>
               </div>
-              <p className="mt-3 font-semibold text-[#2E234D]">
-                📍 Home — Priya Sharma
-              </p>
-              <p className="text-gray-400 text-sm mt-1">
-                221B Maple Street, Bengaluru 560001 · ⚡ arriving in ~12 min
-              </p>
+              {addressLoading ? (
+                <p className="mt-3 text-gray-400 text-sm">Loading address…</p>
+              ) : selectedAddress ? (
+                <>
+                  <p className="mt-3 font-semibold text-[#2E234D]">
+                    📍 Delivery address
+                  </p>
+                  <p className="text-gray-400 text-sm mt-1">
+                    {selectedAddress.address} · ⚡ arriving in ~12 min
+                  </p>
+                </>
+              ) : (
+                <div className="mt-3">
+                  <p className="text-gray-400 text-sm">No saved address yet.</p>
+                  <Link
+                    href="/address"
+                    className="text-pink-500 text-sm font-semibold"
+                  >
+                    Add an address →
+                  </Link>
+                </div>
+              )}
             </div>
 
             {/* PAYMENT METHOD */}
@@ -115,49 +175,20 @@ export default function CheckoutPage() {
               <h2 className="font-bold text-[#2E234D]">2 · Payment method</h2>
 
               <div className="mt-4 flex flex-col gap-3">
-                {PAYMENT_METHODS.map((method) => {
-                  const active = selectedPayment === method.id;
-                  return (
-                    <div
-                      key={method.id}
-                      className={`border rounded-2xl px-5 py-4 ${
-                        active ? "border-pink-400 bg-pink-50" : "border-gray-200"
-                      }`}
-                    >
-                      <label className="flex items-center justify-between cursor-pointer">
-                        <span className="flex items-center gap-3 font-semibold text-[#2E234D]">
-                          {method.icon} {method.label}
-                        </span>
-                        <input
-                          type="radio"
-                          name="payment"
-                          checked={active}
-                          onChange={() => setSelectedPayment(method.id)}
-                          className="w-5 h-5 accent-pink-500"
-                        />
-                      </label>
-
-                      {active && method.id === "card" && (
-                        <div className="mt-4 flex flex-col gap-3">
-                          <input
-                            placeholder="Card number — 1234 5678 9012 3456"
-                            className="border border-gray-200 rounded-xl px-4 py-3 outline-none bg-white"
-                          />
-                          <div className="flex gap-3">
-                            <input
-                              placeholder="MM / YY"
-                              className="flex-1 border border-gray-200 rounded-xl px-4 py-3 outline-none bg-white"
-                            />
-                            <input
-                              placeholder="CVV"
-                              className="flex-1 border border-gray-200 rounded-xl px-4 py-3 outline-none bg-white"
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                <div className="border border-pink-400 bg-pink-50 rounded-2xl px-5 py-4">
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <span className="flex items-center gap-3 font-semibold text-[#2E234D]">
+                      📦 Cash on Delivery
+                    </span>
+                    <input
+                      type="radio"
+                      name="payment"
+                      checked
+                      readOnly
+                      className="w-5 h-5 accent-pink-500"
+                    />
+                  </label>
+                </div>
               </div>
             </div>
           </div>
@@ -270,10 +301,10 @@ export default function CheckoutPage() {
               disabled={cartItems.length === 0}
               className="mt-5 w-full bg-pink-500 disabled:bg-gray-200 disabled:text-gray-400 text-white py-4 rounded-full font-bold"
             >
-              Pay ₹{totalPayable}
+              Place order
             </button>
             <p className="text-center text-gray-400 text-xs mt-2">
-              🔒 100% secure · You won&apos;t be charged until confirmation
+              🔒 100% secure · Pay ₹{totalPayable} in cash on delivery
             </p>
           </div>
         </div>

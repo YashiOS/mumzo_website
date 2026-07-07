@@ -1,10 +1,35 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCart } from "@/src/context/CartContext";
 
-export default function Header() {
+export default function Header({
+  initialQuery = "",
+}: {
+  initialQuery?: string;
+}) {
   const { cartCount } = useCart();
+  const router = useRouter();
+  const [query, setQuery] = useState(initialQuery);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+
+    const timeout = setTimeout(() => {
+      router.replace(`/search?q=${encodeURIComponent(trimmed)}`);
+    }, 400);
+
+    return () => clearTimeout(timeout);
+  }, [query, router]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = query.trim();
+    if (trimmed) router.push(`/search?q=${encodeURIComponent(trimmed)}`);
+  };
 
   return (
     <header className="bg-white border-b">
@@ -18,19 +43,31 @@ export default function Header() {
         </Link>
 
         {/* Search */}
-        <div className="flex-1 max-w-xl mx-10">
-          <div className="bg-pink-50 rounded-full px-5 py-3">
+        <form onSubmit={handleSubmit} className="flex-1 max-w-xl mx-10">
+          <div className="bg-pink-50 rounded-full px-5 py-3 flex items-center gap-2">
             <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder="Search diapers, wipes, formula, snacks..."
               className="w-full bg-transparent outline-none"
             />
+            <button
+              type="submit"
+              aria-label="Search"
+              className="text-gray-400 shrink-0"
+            >
+              🔍
+            </button>
           </div>
-        </div>
+        </form>
 
         {/* Location */}
-        <div className="hidden md:flex items-center px-4 py-2 rounded-full bg-teal-100 text-sm font-semibold text-teal-700">
+        <Link
+          href="/address"
+          className="hidden md:flex items-center px-4 py-2 rounded-full bg-teal-100 text-sm font-semibold text-teal-700 hover:bg-teal-200 transition"
+        >
           📍 Home • ⚡ 12 min
-        </div>
+        </Link>
 
         {/* Icons */}
         <div className="flex items-center gap-4 ml-5">

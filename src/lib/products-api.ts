@@ -23,6 +23,7 @@ type ProductsResponse = {
 
 const PRODUCTS_API_URL = "https://api.mumzo.in/products/getSpecificProducts";
 const PRODUCT_DETAIL_API_URL = "https://api.mumzo.in/products/productDetail";
+const SEARCH_PRODUCTS_API_URL = "https://api.mumzo.in/products/search";
 
 export async function fetchProductsByCategory(
   category: string
@@ -63,6 +64,18 @@ export async function fetchProductById(
   }
 
   const body: ProductDetailResponse = await res.json();
+  return body.data;
+}
+
+export async function searchProductsApi(query: string): Promise<ApiProduct[]> {
+  const url = `${SEARCH_PRODUCTS_API_URL}?q=${encodeURIComponent(query)}`;
+  const res = await fetch(url, { cache: "no-store" });
+
+  if (!res.ok) {
+    throw new Error(`Search failed (${res.status})`);
+  }
+
+  const body: ProductsResponse = await res.json();
   return body.data;
 }
 
