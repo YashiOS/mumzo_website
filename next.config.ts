@@ -1,7 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-   basePath: "/testinginternal",
+  async rewrites() {
+    return [
+      {
+        source: "/",
+        destination: "/landing.html",
+      },
+    ];
+  },
 };
 
 export default nextConfig;
