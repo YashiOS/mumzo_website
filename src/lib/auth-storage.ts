@@ -20,6 +20,14 @@ export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
 
+export function getName() {
+  return localStorage.getItem(NAME_KEY);
+}
+
+export function getEmail() {
+  return localStorage.getItem(EMAIL_KEY);
+}
+
 export function clearAuthSession() {
   localStorage.removeItem(USER_ID_KEY);
   localStorage.removeItem(TOKEN_KEY);

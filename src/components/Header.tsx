@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/src/context/CartContext";
+import ProfileMenu from "@/src/components/ProfileMenu";
 
 export default function Header({
   initialQuery = "",
@@ -83,9 +84,7 @@ export default function Header({
             )}
           </Link>
 
-          <button className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
-            👤
-          </button>
+          <ProfileMenu />
         </div>
       </div>
     </header>
