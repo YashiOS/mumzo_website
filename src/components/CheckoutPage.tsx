@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCart } from "@/src/context/CartContext";
 import { getCategoryStyle } from "@/src/lib/category-style";
 import { productPrice } from "@/src/lib/products-api";
-import { getUserId } from "@/src/lib/auth-storage";
+import { getUserId, useIsLoggedIn } from "@/src/lib/auth-storage";
 import {
   findNearestAddress,
   getAddressesApi,
@@ -18,6 +19,7 @@ const PROMO_CODE = "FIRST20";
 const PROMO_DISCOUNT_RATE = 0.2;
 
 export default function CheckoutPage() {
+  const router = useRouter();
   const { cartDetails, addToCart, decrementFromCart, clearCart } = useCart();
   const [promoCode, setPromoCode] = useState("");
   const [appliedPromo, setAppliedPromo] = useState(false);
@@ -27,6 +29,7 @@ export default function CheckoutPage() {
     null
   );
   const [addressLoading, setAddressLoading] = useState(true);
+  const isLoggedIn = useIsLoggedIn();
 
   useEffect(() => {
     async function run() {
@@ -93,6 +96,18 @@ export default function CheckoutPage() {
 
   const handlePay = () => {
     if (cartItems.length === 0) return;
+
+    const userId = getUserId();
+    if (!userId) {
+      router.push("/login?redirect=/checkout");
+      return;
+    }
+
+    if (!selectedAddress) {
+      router.push("/address");
+      return;
+    }
+
     setOrderPlaced(true);
     clearCart();
   };
@@ -301,7 +316,7 @@ export default function CheckoutPage() {
               disabled={cartItems.length === 0}
               className="mt-5 w-full bg-pink-500 disabled:bg-gray-200 disabled:text-gray-400 text-white py-4 rounded-full font-bold"
             >
-              Place order
+              {isLoggedIn ? "Place order" : "Log in to place order"}
             </button>
             <p className="text-center text-gray-400 text-xs mt-2">
               🔒 100% secure · Pay ₹{totalPayable} in cash on delivery

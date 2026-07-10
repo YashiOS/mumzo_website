@@ -2,19 +2,35 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { getUserId } from "@/src/lib/auth-storage";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  clearAuthSession,
+  getUserId,
+  onAuthChange,
+  useIsLoggedIn,
+} from "@/src/lib/auth-storage";
 import { fetchProfileApi, type Profile } from "@/src/lib/auth-api";
 import type { SavedAddress } from "@/src/lib/address-api";
 
 type Tab = "profile" | "address";
 
 export default function ProfileMenu() {
+  const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("profile");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const isLoggedIn = useIsLoggedIn();
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    return onAuthChange(() => {
+      setProfile(null);
+      setError("");
+    });
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -33,14 +49,11 @@ export default function ProfileMenu() {
   }, [open]);
 
   useEffect(() => {
-    if (!open || profile) return;
+    if (!open || profile || !isLoggedIn) return;
 
     async function run() {
       const userId = getUserId();
-      if (!userId) {
-        setError("Please log in to view your profile.");
-        return;
-      }
+      if (!userId) return;
 
       setLoading(true);
       setError("");
@@ -56,13 +69,25 @@ export default function ProfileMenu() {
     }
 
     run();
-  }, [open, profile]);
+  }, [open, profile, isLoggedIn]);
+
+  const handleLoginClick = () => {
+    setOpen(false);
+    router.push(`/login?redirect=${encodeURIComponent(pathname || "/home")}`);
+  };
+
+  const handleLogout = () => {
+    clearAuthSession();
+    setProfile(null);
+    setOpen(false);
+    router.push("/home");
+  };
 
   return (
     <div className="relative" ref={containerRef}>
       <button
         onClick={() => setOpen((v) => !v)}
-        aria-label="Profile"
+        aria-label={isLoggedIn ? "Profile" : "Log in"}
         className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center"
       >
         👤
@@ -70,42 +95,71 @@ export default function ProfileMenu() {
 
       {open && (
         <div className="absolute right-0 top-14 w-80 bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden z-20">
-          <div className="flex border-b border-gray-100">
-            <button
-              onClick={() => setTab("profile")}
-              className={`flex-1 py-3 text-sm font-semibold ${
-                tab === "profile"
-                  ? "text-pink-500 border-b-2 border-pink-500"
-                  : "text-gray-400"
-              }`}
-            >
-              Profile
-            </button>
-            <button
-              onClick={() => setTab("address")}
-              className={`flex-1 py-3 text-sm font-semibold ${
-                tab === "address"
-                  ? "text-pink-500 border-b-2 border-pink-500"
-                  : "text-gray-400"
-              }`}
-            >
-              Address
-            </button>
-          </div>
-
-          <div className="p-5">
-            {loading ? (
-              <p className="text-sm text-gray-400 text-center py-4">
-                Loading…
+          {!isLoggedIn ? (
+            <div className="p-6 flex flex-col items-center text-center gap-3">
+              <div className="w-14 h-14 rounded-full bg-purple-100 flex items-center justify-center text-2xl">
+                👤
+              </div>
+              <p className="text-sm text-gray-500">
+                Log in to view your profile, saved addresses, and order
+                history.
               </p>
-            ) : error ? (
-              <p className="text-sm text-red-500 text-center py-4">{error}</p>
-            ) : tab === "profile" ? (
-              <ProfileTab profile={profile} />
-            ) : (
-              <AddressTab addresses={profile?.addresses ?? []} />
-            )}
-          </div>
+              <button
+                onClick={handleLoginClick}
+                className="w-full bg-pink-500 text-white py-3 rounded-full font-semibold"
+              >
+                Log in
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="flex border-b border-gray-100">
+                <button
+                  onClick={() => setTab("profile")}
+                  className={`flex-1 py-3 text-sm font-semibold ${
+                    tab === "profile"
+                      ? "text-pink-500 border-b-2 border-pink-500"
+                      : "text-gray-400"
+                  }`}
+                >
+                  Profile
+                </button>
+                <button
+                  onClick={() => setTab("address")}
+                  className={`flex-1 py-3 text-sm font-semibold ${
+                    tab === "address"
+                      ? "text-pink-500 border-b-2 border-pink-500"
+                      : "text-gray-400"
+                  }`}
+                >
+                  Address
+                </button>
+              </div>
+
+              <div className="p-5">
+                {loading ? (
+                  <p className="text-sm text-gray-400 text-center py-4">
+                    Loading…
+                  </p>
+                ) : error ? (
+                  <p className="text-sm text-red-500 text-center py-4">
+                    {error}
+                  </p>
+                ) : tab === "profile" ? (
+                  <ProfileTab profile={profile} />
+                ) : (
+                  <AddressTab addresses={profile?.addresses ?? []} />
+                )}
+              </div>
+
+              <button
+                onClick={handleLogout}
+                className="w-full py-3 text-sm font-semibold text-gray-500 border-t border-gray-100 hover:bg-gray-50"
+              >
+                Log out
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

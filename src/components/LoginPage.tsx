@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { loginUser } from "@/src/lib/auth-api";
 import { saveAuthSession } from "@/src/lib/auth-storage";
 
 export default function LoginPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
 
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -21,7 +22,8 @@ export default function LoginPage() {
         try {
             const login = await loginUser(email, password);
             saveAuthSession(login);
-            router.push("/home");
+            const redirect = searchParams.get("redirect");
+            router.push(redirect && redirect.startsWith("/") ? redirect : "/home");
         } catch (err) {
             setError(err instanceof Error ? err.message : "Login failed");
         } finally {

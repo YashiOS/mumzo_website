@@ -48,7 +48,7 @@ export default function AddressPage() {
 
     const userId = getUserId();
     if (!userId) {
-      setError("Please log in before saving an address.");
+      router.push("/login?redirect=/address");
       return;
     }
 

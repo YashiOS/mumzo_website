@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -14,7 +15,13 @@ import {
   removeFromCartApi,
   type CartDetailItem,
 } from "@/src/lib/cart-api";
-import { getUserId } from "@/src/lib/auth-storage";
+import { fetchProductById } from "@/src/lib/products-api";
+import { getUserId, onAuthChange } from "@/src/lib/auth-storage";
+import {
+  clearGuestCart,
+  getGuestCart,
+  saveGuestCart,
+} from "@/src/lib/guest-cart";
 
 type CartItems = Record<string, number>;
 
@@ -37,9 +44,36 @@ function itemsFromCartDetails(details: CartDetailItem[]): CartItems {
   return items;
 }
 
+async function fetchGuestCartDetails(
+  guestItems: CartItems
+): Promise<CartDetailItem[]> {
+  const entries = Object.entries(guestItems);
+
+  const details = await Promise.all(
+    entries.map(async ([productId, quantity]) => {
+      try {
+        const product = await fetchProductById(productId);
+        if (!product) return null;
+        return { productId, quantity, product };
+      } catch (err) {
+        console.error("Failed to fetch guest cart product:", err);
+        return null;
+      }
+    })
+  );
+
+  return details.filter((d): d is CartDetailItem => d !== null);
+}
+
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItems>({});
   const [cartDetails, setCartDetails] = useState<CartDetailItem[]>([]);
+  const cartDetailsRef = useRef<CartDetailItem[]>([]);
+  const wasLoggedIn = useRef(false);
+
+  useEffect(() => {
+    cartDetailsRef.current = cartDetails;
+  }, [cartDetails]);
 
   const refreshCart = useCallback(async () => {
     const userId = getUserId();
@@ -54,33 +88,99 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  useEffect(() => {
-    let ignore = false;
-
-    const userId = getUserId();
-    if (!userId) return;
-
-    fetchCartDetailsApi(userId)
-      .then((res) => {
-        if (ignore) return;
-        setCartDetails(res.data);
-        setItems(itemsFromCartDetails(res.data));
-      })
-      .catch((err) => {
-        if (!ignore) console.error("Failed to fetch cart:", err);
-      });
-
-    return () => {
-      ignore = true;
-    };
+  const loadGuestCart = useCallback(async () => {
+    const guestItems = getGuestCart();
+    const details = await fetchGuestCartDetails(guestItems);
+    setCartDetails(details);
+    setItems(itemsFromCartDetails(details));
   }, []);
+
+  const mergeGuestCartIntoAccount = useCallback(
+    async (userId: string) => {
+      const guestItems = getGuestCart();
+      const entries = Object.entries(guestItems);
+      if (entries.length === 0) {
+        await refreshCart();
+        return;
+      }
+
+      try {
+        for (const [productId, qty] of entries) {
+          for (let i = 0; i < qty; i++) {
+            await addToCartApi(userId, productId);
+          }
+        }
+        clearGuestCart();
+      } catch (err) {
+        console.error("Failed to merge guest cart:", err);
+      }
+
+      await refreshCart();
+    },
+    [refreshCart]
+  );
+
+  useEffect(() => {
+    async function init() {
+      const userId = getUserId();
+      if (userId) {
+        wasLoggedIn.current = true;
+        await mergeGuestCartIntoAccount(userId);
+      } else {
+        wasLoggedIn.current = false;
+        await loadGuestCart();
+      }
+    }
+
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    return onAuthChange(() => {
+      const userId = getUserId();
+      if (userId && !wasLoggedIn.current) {
+        wasLoggedIn.current = true;
+        mergeGuestCartIntoAccount(userId);
+      } else if (!userId && wasLoggedIn.current) {
+        wasLoggedIn.current = false;
+        loadGuestCart();
+      }
+    });
+  }, [mergeGuestCartIntoAccount, loadGuestCart]);
 
   const addToCart = useCallback(
     (id: string, qty: number = 1) => {
       setItems((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + qty }));
 
       const userId = getUserId();
-      if (!userId) return;
+      if (!userId) {
+        const guestItems = getGuestCart();
+        const nextQty = (guestItems[id] ?? 0) + qty;
+        guestItems[id] = nextQty;
+        saveGuestCart(guestItems);
+
+        if (cartDetailsRef.current.some((d) => d.productId === id)) {
+          setCartDetails((prev) =>
+            prev.map((d) =>
+              d.productId === id ? { ...d, quantity: nextQty } : d
+            )
+          );
+        } else {
+          fetchProductById(id)
+            .then((product) => {
+              if (!product) return;
+              setCartDetails((prev) => {
+                if (prev.some((d) => d.productId === id)) return prev;
+                return [...prev, { productId: id, quantity: nextQty, product }];
+              });
+            })
+            .catch((err) =>
+              console.error("Failed to fetch product for guest cart:", err)
+            );
+        }
+        return;
+      }
 
       (async () => {
         try {
@@ -110,7 +210,23 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       });
 
       const userId = getUserId();
-      if (!userId) return;
+      if (!userId) {
+        const guestItems = getGuestCart();
+        const nextQty = (guestItems[id] ?? 0) - 1;
+        if (nextQty <= 0) {
+          delete guestItems[id];
+          setCartDetails((prev) => prev.filter((d) => d.productId !== id));
+        } else {
+          guestItems[id] = nextQty;
+          setCartDetails((prev) =>
+            prev.map((d) =>
+              d.productId === id ? { ...d, quantity: nextQty } : d
+            )
+          );
+        }
+        saveGuestCart(guestItems);
+        return;
+      }
 
       (async () => {
         try {
@@ -124,7 +240,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     [refreshCart]
   );
 
-  const clearCart = useCallback(() => setItems({}), []);
+  const clearCart = useCallback(() => {
+    setItems({});
+    setCartDetails([]);
+    clearGuestCart();
+  }, []);
 
   const cartCount = useMemo(
     () => Object.values(items).reduce((sum, qty) => sum + qty, 0),
